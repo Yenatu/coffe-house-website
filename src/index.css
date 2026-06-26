@@ -5,4 +5,10 @@
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  
+  --color-cafe-primary: var(--cafe-primary);
+  --color-cafe-primary-hover: var(--cafe-primary-hover);
+  --color-cafe-primary-light: var(--cafe-primary-light);
+  --color-cafe-primary-text: var(--cafe-primary-text);
+  --color-cafe-accent: var(--cafe-accent);
 }

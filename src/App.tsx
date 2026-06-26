@@ -8,8 +8,9 @@ import CustomizeModal from './components/CustomizeModal';
 import PastOrders from './components/PastOrders';
 import OrderTracker from './components/OrderTracker';
 import MerchantDashboard from './components/MerchantDashboard';
-import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { doc, setDoc, updateDoc, onSnapshot, collection, query, where, orderBy } from 'firebase/firestore';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { db, handleFirestoreError, OperationType, auth } from './firebase';
 import {
   Coffee,
   ShoppingBag,
@@ -59,51 +60,128 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
 
-  // Load orders & active order from localStorage on mount
+  // Theme state
+  const [currentTheme, setCurrentTheme] = useState<string>(() => {
+    return localStorage.getItem('super_double_a_theme') || 'crema';
+  });
+
+  // Auth & Database connection states
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isDbConnecting, setIsDbConnecting] = useState<boolean>(true);
+
+  // Apply theme class and CSS variables to the document
   useEffect(() => {
+    const root = document.documentElement;
+    if (currentTheme === 'crema') {
+      root.style.setProperty('--cafe-primary', '#78350f'); // bg-amber-900
+      root.style.setProperty('--cafe-primary-hover', '#451a03'); // bg-amber-950
+      root.style.setProperty('--cafe-primary-light', '#fef3c7'); // bg-amber-100/50
+      root.style.setProperty('--cafe-primary-text', '#78350f'); // text-amber-900
+      root.style.setProperty('--cafe-accent', '#f59e0b'); // amber-500
+    } else if (currentTheme === 'dark_roast') {
+      root.style.setProperty('--cafe-primary', '#1c1917'); // bg-stone-900
+      root.style.setProperty('--cafe-primary-hover', '#0c0a09'); // bg-stone-950
+      root.style.setProperty('--cafe-primary-light', '#e7e5e4'); // bg-stone-200
+      root.style.setProperty('--cafe-primary-text', '#1c1917'); // text-stone-900
+      root.style.setProperty('--cafe-accent', '#78716c'); // stone-500
+    } else if (currentTheme === 'matcha') {
+      root.style.setProperty('--cafe-primary', '#065f46'); // bg-emerald-800
+      root.style.setProperty('--cafe-primary-hover', '#064e3b'); // bg-emerald-900
+      root.style.setProperty('--cafe-primary-light', '#d1fae5'); // bg-emerald-100
+      root.style.setProperty('--cafe-primary-text', '#065f46'); // text-emerald-800
+      root.style.setProperty('--cafe-accent', '#10b981'); // emerald-500
+    } else if (currentTheme === 'chai') {
+      root.style.setProperty('--cafe-primary', '#c2410c'); // bg-orange-700
+      root.style.setProperty('--cafe-primary-hover', '#7c2d12'); // bg-orange-900
+      root.style.setProperty('--cafe-primary-light', '#ffedd5'); // bg-orange-100
+      root.style.setProperty('--cafe-primary-text', '#c2410c'); // text-orange-700
+      root.style.setProperty('--cafe-accent', '#f97316'); // orange-500
+    } else if (currentTheme === 'midnight') {
+      root.style.setProperty('--cafe-primary', '#1e1b4b'); // bg-indigo-950
+      root.style.setProperty('--cafe-primary-hover', '#0f172a'); // bg-slate-900
+      root.style.setProperty('--cafe-primary-light', '#e0e7ff'); // bg-indigo-100
+      root.style.setProperty('--cafe-primary-text', '#1e1b4b'); // text-indigo-950
+      root.style.setProperty('--cafe-accent', '#6366f1'); // indigo-500
+    }
+    localStorage.setItem('super_double_a_theme', currentTheme);
+  }, [currentTheme]);
+
+  // 1. Initialize anonymous Firebase Auth on mount
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        
+        // Sync any cached local orders that don't have a userId yet
+        try {
+          const savedOrders = localStorage.getItem('brewahead_orders');
+          if (savedOrders) {
+            const parsed = JSON.parse(savedOrders) as Order[];
+            for (const order of parsed) {
+              if (!order.userId) {
+                order.userId = user.uid;
+                await setDoc(doc(db, 'orders', order.id), order, { merge: true });
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Failed to migrate local orders to database:", syncErr);
+        }
+      } else {
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Auth initialization failed:", error);
+        }
+      }
+    });
+
+    // Load static local orders as cache fallback
     try {
       const savedOrders = localStorage.getItem('brewahead_orders');
       if (savedOrders) {
-        const parsed = JSON.parse(savedOrders) as Order[];
-        setOrders(parsed);
-        // Find any active order to auto-track
-        const active = parsed.find(o => o.active);
-        if (active) {
-          setActiveOrder(active);
-        }
+        setOrders(JSON.parse(savedOrders));
       }
     } catch (e) {
-      console.error('Failed to parse past orders', e);
+      console.error('Failed to parse cached orders', e);
     }
+
+    return () => unsubscribeAuth();
   }, []);
 
-  // Listen to active order updates from Firestore in real-time
+  // 2. Real-time sync of customer's orders from Firestore
   useEffect(() => {
-    if (!activeOrder?.id) return;
+    if (!currentUser?.uid) return;
 
-    const orderRef = doc(db, 'orders', activeOrder.id);
-    const unsubscribe = onSnapshot(orderRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const updatedData = snapshot.data() as Order;
-        if (updatedData.status !== activeOrder.status || updatedData.active !== activeOrder.active) {
-          const isFinished = updatedData.status === 'picked_up';
-          const newActiveVal = isFinished ? null : { ...activeOrder, ...updatedData };
-          setActiveOrder(newActiveVal);
+    setIsDbConnecting(true);
+    const q = query(
+      collection(db, 'orders'),
+      where('userId', '==', currentUser.uid)
+    );
 
-          // Update general list as well
-          setOrders(prev => {
-            const updatedList = prev.map(o => o.id === activeOrder.id ? { ...o, ...updatedData } : o);
-            localStorage.setItem('brewahead_orders', JSON.stringify(updatedList));
-            return updatedList;
-          });
-        }
-      }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dbOrders: Order[] = [];
+      snapshot.forEach((doc) => {
+        dbOrders.push(doc.data() as Order);
+      });
+
+      // Sort in-memory by date (newest first)
+      dbOrders.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+
+      setOrders(dbOrders);
+      localStorage.setItem('brewahead_orders', JSON.stringify(dbOrders));
+
+      // Auto-set the active order if there is an active order in the list
+      const active = dbOrders.find(o => o.active);
+      setActiveOrder(active || null);
+      setIsDbConnecting(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `orders/${activeOrder.id}`);
+      console.warn("Firestore query failed (falling back to cached data):", error);
+      setIsDbConnecting(false);
     });
 
     return () => unsubscribe();
-  }, [activeOrder?.id, activeOrder?.status]);
+  }, [currentUser?.uid]);
 
   // Save orders helper
   const saveOrders = (updatedOrders: Order[]) => {
@@ -192,7 +270,8 @@ export default function App() {
       pickupTime,
       pickupCode: pickupPasscode,
       orderDate: new Date().toISOString(),
-      active: true
+      active: true,
+      userId: currentUser?.uid || 'anonymous'
     };
 
     // Write order to Firestore database in real-time
@@ -313,33 +392,33 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-stone-200 px-4 py-3.5 sm:px-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setSelectedShop(null)}>
-            <div className="w-10 h-10 bg-amber-900 rounded-2xl flex items-center justify-center text-white shadow-md shadow-amber-900/20">
+            <div className="w-10 h-10 bg-cafe-primary rounded-2xl flex items-center justify-center text-white shadow-md shadow-cafe-primary/20 transition-all duration-300">
               <Coffee className="w-5.5 h-5.5" />
             </div>
             <div>
-              <span className="text-[10px] tracking-widest font-black uppercase text-amber-800 block leading-tight">Order Ahead</span>
+              <span className="text-[10px] tracking-widest font-black uppercase text-cafe-primary-text block leading-tight transition-all duration-300">Order Ahead</span>
               <h1 className="font-serif font-black text-xl text-stone-900 leading-tight">SUPER DOUBLE A</h1>
             </div>
           </div>
-
+ 
           {/* Center Navigation selectors */}
           <nav className="hidden md:flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl border border-stone-200">
             <button
               onClick={() => { setActiveTab('explore'); }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'explore' ? 'bg-white text-amber-950 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                activeTab === 'explore' ? 'bg-white text-cafe-primary-hover shadow-sm' : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              <MapPin className="w-3.5 h-3.5 text-amber-800" />
+              <MapPin className="w-3.5 h-3.5 text-cafe-primary-text transition-all duration-300" />
               <span>Explore Cafes</span>
             </button>
             <button
               onClick={() => { setActiveTab('history'); }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'history' ? 'bg-white text-amber-950 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                activeTab === 'history' ? 'bg-white text-cafe-primary-hover shadow-sm' : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              <History className="w-3.5 h-3.5 text-amber-800" />
+              <History className="w-3.5 h-3.5 text-cafe-primary-text transition-all duration-300" />
               <span>Coffee Journal</span>
               {orders.length > 0 && (
                 <span className="bg-stone-200 text-stone-700 rounded-full px-1.5 py-0.2 text-[9px] font-bold">
@@ -350,21 +429,42 @@ export default function App() {
             <button
               onClick={() => { setActiveTab('merchant'); }}
               className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                activeTab === 'merchant' ? 'bg-white text-amber-950 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                activeTab === 'merchant' ? 'bg-white text-cafe-primary-hover shadow-sm' : 'text-stone-500 hover:text-stone-800'
               }`}
             >
-              <Briefcase className="w-3.5 h-3.5 text-amber-800" />
+              <Briefcase className="w-3.5 h-3.5 text-cafe-primary-text transition-all duration-300" />
               <span>Shop Portal</span>
             </button>
           </nav>
 
           {/* Right utility buttons: Cart & Portal indicators */}
           <div className="flex items-center gap-3">
+            {/* Theme Selector Palette */}
+            <div className="flex items-center gap-1 bg-stone-150/50 hover:bg-stone-150 border border-stone-200/50 p-1.5 rounded-2xl shadow-inner transition-colors" title="Change Aesthetic Theme">
+              {[
+                { id: 'crema', bg: 'bg-amber-800', label: 'Warm Crema' },
+                { id: 'dark_roast', bg: 'bg-stone-850', label: 'Dark Roast' },
+                { id: 'matcha', bg: 'bg-emerald-700', label: 'Sweet Matcha' },
+                { id: 'chai', bg: 'bg-orange-700', label: 'Spiced Chai' },
+                { id: 'midnight', bg: 'bg-indigo-900', label: 'Midnight Brew' }
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setCurrentTheme(t.id)}
+                  className={`w-4 h-4 rounded-full ${t.bg} transition-all relative cursor-pointer focus:outline-none ${
+                    currentTheme === t.id ? 'ring-2 ring-offset-2 ring-stone-400 scale-110' : 'opacity-65 hover:opacity-100 hover:scale-105'
+                  }`}
+                  title={t.label}
+                  id={`theme-btn-${t.id}`}
+                />
+              ))}
+            </div>
+
             <button
               onClick={() => { setActiveTab(activeTab === 'merchant' ? 'explore' : 'merchant'); }}
               className={`p-2.5 rounded-2xl border transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'merchant'
-                  ? 'bg-amber-900 border-amber-950 text-white shadow-md'
+                  ? 'bg-cafe-primary border-cafe-primary-hover text-white shadow-md'
                   : 'bg-stone-50 hover:bg-stone-100 border-stone-200 text-stone-700'
               }`}
               title="Merchant/Barista Portal"
@@ -375,18 +475,18 @@ export default function App() {
 
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative p-2.5 bg-amber-50/60 hover:bg-amber-50 rounded-2xl border border-amber-250/50 text-amber-900 transition-all flex items-center gap-2 cursor-pointer"
+              className="relative p-2.5 bg-cafe-primary-light/30 hover:bg-cafe-primary-light/50 rounded-2xl border border-cafe-primary/20 text-cafe-primary-text transition-all flex items-center gap-2 cursor-pointer"
             >
               <ShoppingBag className="w-5 h-5 stroke-[2]" />
               {cart.length > 0 ? (
                 <>
-                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-900 text-white font-mono text-[10px] font-extrabold rounded-full flex items-center justify-center border-2 border-white">
+                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-cafe-primary text-white font-mono text-[10px] font-extrabold rounded-full flex items-center justify-center border-2 border-white">
                     {cart.reduce((acc, item) => acc + item.quantity, 0)}
                   </span>
                   <span className="text-xs font-extrabold hidden sm:inline">${subtotal.toFixed(2)}</span>
                 </>
               ) : (
-                <span className="text-xs font-bold text-amber-800/80 hidden sm:inline">Bag Empty</span>
+                <span className="text-xs font-bold text-cafe-primary-text/80 hidden sm:inline">Bag Empty</span>
               )}
             </button>
           </div>
@@ -823,7 +923,7 @@ export default function App() {
                           <select
                             value={pickupTime}
                             onChange={(e) => setPickupTime(e.target.value)}
-                            className="w-full text-xs bg-white p-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-1 focus:ring-amber-900 focus:border-amber-900"
+                            className="w-full text-xs bg-white p-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-1 focus:ring-cafe-primary focus:border-cafe-primary"
                           >
                             <option value="ASAP (5-8 Mins)">ASAP (Ready in {selectedShop?.waitTimeMinutes || 5} mins)</option>
                             <option value="In 15 Minutes">In 15 Minutes</option>
@@ -831,7 +931,7 @@ export default function App() {
                             <option value="In 1 Hour">In 1 Hour</option>
                           </select>
                         </div>
-
+ 
                         {/* B. Tip the baristas */}
                         <div>
                           <label className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1.5">
@@ -850,7 +950,7 @@ export default function App() {
                                   }}
                                   className={`py-1.5 px-1 rounded-xl text-xs font-bold border text-center transition-all cursor-pointer ${
                                     isActive
-                                      ? 'bg-amber-900 border-amber-950 text-white'
+                                      ? 'bg-cafe-primary border-cafe-primary-hover text-white'
                                       : 'bg-white border-stone-200 text-stone-600 hover:border-stone-300'
                                   }`}
                                 >
@@ -859,12 +959,12 @@ export default function App() {
                               );
                             })}
                           </div>
-
+ 
                           <div className="mt-2">
                             <button
                               type="button"
                               onClick={() => setCustomTipActive(!customTipActive)}
-                              className={`text-[10px] font-bold underline cursor-pointer ${customTipActive ? 'text-amber-900' : 'text-stone-400 hover:text-stone-700'}`}
+                              className={`text-[10px] font-bold underline cursor-pointer ${customTipActive ? 'text-cafe-primary-text' : 'text-stone-400 hover:text-stone-700'}`}
                             >
                               {customTipActive ? 'Choose Standard Tip' : '+ Custom Barista Tip'}
                             </button>
@@ -881,13 +981,13 @@ export default function App() {
                                   placeholder="0.00"
                                   value={customTipInput}
                                   onChange={(e) => setCustomTipInput(e.target.value)}
-                                  className="w-full text-xs pl-6 pr-3 py-1.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-900 focus:border-amber-900"
+                                  className="w-full text-xs pl-6 pr-3 py-1.5 bg-white border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-cafe-primary focus:border-cafe-primary"
                                 />
                               </motion.div>
                             )}
                           </div>
                         </div>
-
+ 
                         {/* C. Prices breakdown */}
                         <div className="space-y-1.5 pt-2 border-t border-stone-200/60 text-xs text-stone-600 font-medium">
                           <div className="flex justify-between">
@@ -904,14 +1004,14 @@ export default function App() {
                           </div>
                           <div className="flex justify-between text-stone-950 font-bold pt-2 border-t border-stone-200 text-sm">
                             <span>Grand Total</span>
-                            <span className="font-mono text-amber-950">${grandTotal.toFixed(2)}</span>
+                            <span className="font-mono text-cafe-primary-text font-black">${grandTotal.toFixed(2)}</span>
                           </div>
                         </div>
-
+ 
                         {/* D. Instant checkout button */}
                         <button
                           onClick={handleCheckout}
-                          className="w-full bg-amber-900 hover:bg-amber-950 text-white font-sans font-extrabold text-sm py-3 px-6 rounded-2xl shadow-md shadow-amber-900/10 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                          className="w-full bg-cafe-primary hover:bg-cafe-primary-hover text-white font-sans font-extrabold text-sm py-3 px-6 rounded-2xl shadow-md shadow-cafe-primary/10 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer mt-1"
                         >
                           <Coffee className="w-4 h-4 fill-white" />
                           <span>Place Pickup Order Ahead</span>

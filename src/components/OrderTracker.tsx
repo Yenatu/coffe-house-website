@@ -136,7 +136,7 @@ export default function OrderTracker({ order, onUpdateStatus, onDismiss }: Order
 
             {/* Brew Liquid fill */}
             <motion.div
-              className="absolute bottom-0 left-0 right-0 bg-amber-900 rounded-b-lg"
+              className="absolute bottom-0 left-0 right-0 bg-cafe-primary rounded-b-lg transition-all duration-500"
               initial={{ height: '10%' }}
               animate={
                 order.status === 'received'
@@ -207,12 +207,12 @@ export default function OrderTracker({ order, onUpdateStatus, onDismiss }: Order
                   {/* Circle Indicator */}
                   <div className="relative shrink-0">
                     {isPast ? (
-                      <div className="w-6.5 h-6.5 rounded-full bg-amber-900 border border-amber-950 flex items-center justify-center text-white shadow-sm">
+                      <div className="w-6.5 h-6.5 rounded-full bg-cafe-primary border border-cafe-primary-hover flex items-center justify-center text-white shadow-sm transition-all">
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       </div>
                     ) : isCurrent ? (
-                      <div className="w-6.5 h-6.5 rounded-full bg-white border-2 border-amber-800 flex items-center justify-center shadow-md relative">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-800 animate-pulse"></span>
+                      <div className="w-6.5 h-6.5 rounded-full bg-white border-2 border-cafe-primary flex items-center justify-center shadow-md relative transition-all">
+                        <span className="w-2.5 h-2.5 rounded-full bg-cafe-primary animate-pulse"></span>
                       </div>
                     ) : (
                       <div className="w-6.5 h-6.5 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-300">

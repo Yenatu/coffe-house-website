@@ -56,7 +56,7 @@ export default function PastOrders({ orders, onReorder, onTrackOrder }: PastOrde
               </div>
               <h4 className="font-sans font-bold text-sm text-stone-900 mt-1 flex items-center gap-1">
                 <span>Ordered from</span>
-                <span className="text-amber-800">{order.shopName}</span>
+                <span className="text-cafe-primary-text font-black">{order.shopName}</span>
               </h4>
             </div>
 
@@ -65,7 +65,7 @@ export default function PastOrders({ orders, onReorder, onTrackOrder }: PastOrde
               {order.active ? (
                 <button
                   onClick={() => onTrackOrder(order)}
-                  className="px-3 py-1 rounded-full text-xs font-bold bg-amber-900 text-white border border-amber-950 hover:bg-amber-950 transition-all cursor-pointer"
+                  className="px-3 py-1 rounded-full text-xs font-bold bg-cafe-primary text-white border border-cafe-primary-hover hover:bg-cafe-primary-hover transition-all cursor-pointer"
                 >
                   Track Order Live
                 </button>
@@ -109,7 +109,7 @@ export default function PastOrders({ orders, onReorder, onTrackOrder }: PastOrde
 
             <button
               onClick={() => onReorder(order.items, order.shopId)}
-              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-amber-900 border border-amber-850/50 rounded-xl bg-amber-50/20 hover:bg-amber-50 hover:border-amber-900 transition-colors cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-cafe-primary-text border border-cafe-primary/20 rounded-xl bg-cafe-primary-light/10 hover:bg-cafe-primary-light/45 hover:border-cafe-primary transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Reorder Brewing Bag</span>

@@ -73,4 +73,5 @@ export interface Order {
   pickupCode: string; // e.g. "COFFEE-482"
   orderDate: string;
   active: boolean;
+  userId?: string;
 }
