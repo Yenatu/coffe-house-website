@@ -202,6 +202,19 @@ export default function App() {
       handleFirestoreError(error, OperationType.CREATE, `orders/${orderId}`);
     }
 
+    // Send order notification email to the owner
+    try {
+      fetch('/api/send-order-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ order: newOrder })
+      }).catch(err => console.error("Async email dispatch failed:", err));
+    } catch (emailErr) {
+      console.error("Error calling send-order-email API:", emailErr);
+    }
+
     // Update orders arrays
     const updatedOrders = [newOrder, ...orders.map(o => ({ ...o, active: false }))]; // Ensure only 1 active order
     saveOrders(updatedOrders);
@@ -305,7 +318,7 @@ export default function App() {
             </div>
             <div>
               <span className="text-[10px] tracking-widest font-black uppercase text-amber-800 block leading-tight">Order Ahead</span>
-              <h1 className="font-serif font-black text-xl text-stone-900 leading-tight">BrewAhead</h1>
+              <h1 className="font-serif font-black text-xl text-stone-900 leading-tight">SUPER DOUBLE A</h1>
             </div>
           </div>
 
@@ -927,7 +940,7 @@ export default function App() {
             <div className="w-8 h-8 bg-amber-900/30 border border-amber-900/45 rounded-xl flex items-center justify-center text-amber-400">
               <Coffee className="w-4 h-4" />
             </div>
-            <p className="font-serif font-bold text-stone-200">BrewAhead neighborhood orders</p>
+            <p className="font-serif font-bold text-stone-200">SUPER DOUBLE A neighborhood orders</p>
           </div>
           <p className="text-[10px] text-stone-500 font-mono text-center md:text-right">
             Designed to connect local artisan roasters with busy neighborhood coffee fans. Secure sandbox environment.

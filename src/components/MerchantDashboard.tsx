@@ -68,7 +68,7 @@ export default function MerchantDashboard() {
       const seed1: any = {
         id: mockIds[0],
         shopId: "rustic-grind",
-        shopName: "The Rustic Grind",
+        shopName: "SUPER DOUBLE A",
         shopAddress: "124 Oakwood Ave",
         items: [
           {
@@ -250,7 +250,7 @@ export default function MerchantDashboard() {
             className="bg-white border border-stone-300 rounded-xl px-3 py-1.5 text-xs font-bold text-stone-700 outline-none focus:ring-2 focus:ring-amber-900/20 shadow-sm"
           >
             <option value="all">All Shops</option>
-            <option value="rustic-grind">The Rustic Grind</option>
+            <option value="rustic-grind">SUPER DOUBLE A</option>
             <option value="neon-wave">Neon Wave Coffee</option>
             <option value="velvet-bean">Velvet Bean Atelier</option>
           </select>

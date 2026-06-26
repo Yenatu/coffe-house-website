@@ -3,7 +3,7 @@ import { Shop, MenuItem } from './types';
 export const SHOPS: Shop[] = [
   {
     id: 'rustic-grind',
-    name: 'The Rustic Grind',
+    name: 'SUPER DOUBLE A',
     description: 'A cozy sanctuary for serious coffee purists. Specializing in single-origin hand-poured coffees, custom light roasts, and buttery wood-fired pastries.',
     address: '428 Timberline Dr, Downtown',
     distance: 0.4,
