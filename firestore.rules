@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper to validate generic document IDs
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper to validate the Order document schema
+    function isValidOrder(data) {
+      return data.keys().hasAll(['id', 'shopId', 'shopName', 'items', 'subtotal', 'tax', 'tip', 'total', 'status', 'pickupCode', 'orderDate', 'active'])
+        && data.id is string && data.id.size() <= 100
+        && data.shopId is string && data.shopId.size() <= 100
+        && data.shopName is string && data.shopName.size() <= 200
+        && data.items is list
+        && data.subtotal is number && data.subtotal >= 0
+        && data.tax is number && data.tax >= 0
+        && data.tip is number && data.tip >= 0
+        && data.total is number && data.total >= 0
+        && data.status is string && (data.status == 'received' || data.status == 'brewing' || data.status == 'ready' || data.status == 'picked_up')
+        && data.pickupCode is string && data.pickupCode.size() <= 50
+        && data.orderDate is string
+        && data.active is bool;
+    }
+
+    // Orders Collection Rules
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId);
+      allow list: if true; // Allow querying orders
+      allow create: if isValidId(orderId) && isValidOrder(request.resource.data);
+      allow update: if isValidId(orderId) 
+        && isValidOrder(request.resource.data)
+        // Ensure status field matches valid transitions or other non-immutable updates
+        && (request.resource.data.status != resource.data.status || request.resource.data.active != resource.data.active);
+      allow delete: if false; // No direct order deletions
+    }
+  }
+}

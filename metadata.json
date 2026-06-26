@@ -1,0 +1,6 @@
+{
+  "name": "Local Coffee Order Ahead",
+  "description": "An interactive web app for local coffee shops that allows users to explore cafes, customize drinks, and order ahead for pickup with a live brewing tracker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

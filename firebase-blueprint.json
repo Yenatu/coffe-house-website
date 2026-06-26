@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "An order placed by a customer for pickup at a specific coffee shop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "shopId": { "type": "string" },
+        "shopName": { "type": "string" },
+        "shopAddress": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "tip": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["received", "brewing", "ready", "picked_up"] },
+        "pickupTime": { "type": "string" },
+        "pickupCode": { "type": "string" },
+        "orderDate": { "type": "string" },
+        "active": { "type": "boolean" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "shopId", "shopName", "items", "subtotal", "tax", "tip", "total", "status", "pickupCode", "orderDate", "active"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Global collection of coffee pickup orders"
+    }
+  }
+}
